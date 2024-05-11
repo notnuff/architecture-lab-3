@@ -17,7 +17,7 @@ func main() {
 		parser lang.Parser  // Парсер команд.
 	)
 
-	pv.Debug = true
+	//pv.Debug = true
 	pv.Title = "Simple painter"
 
 	pv.OnScreenReady = opLoop.Start

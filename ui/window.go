@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"architecture-lab-3/primitives"
 	"golang.org/x/exp/shiny/driver"
 	"golang.org/x/exp/shiny/imageutil"
 	"golang.org/x/exp/shiny/screen"
@@ -23,56 +24,19 @@ const (
 type Visualizer struct {
 	Title         string
 	Debug         bool
-	OnScreenReady func(s screen.Screen)
+	OnScreenReady func()
 
 	w    screen.Window
-	tx   chan screen.Texture
+	tx   chan primitives.TextureState
 	done chan struct{}
 
 	sz  size.Event
 	pos image.Rectangle
-	fig tshape
+	fig primitives.TShape
 }
-
-type tshape struct {
-	col    color.RGBA
-	posX   int
-	width  int
-	posY   int
-	height int
-}
-
-func (fig *tshape) Draw(w screen.Window) {
-	dr1 := image.Rectangle{
-		Min: image.Point{
-			X: fig.posX - fig.width/2,
-			Y: fig.posY - fig.height/4,
-		},
-		Max: image.Point{
-			X: fig.posX + fig.width/2,
-			Y: fig.posY,
-		},
-	}
-	dr2 := image.Rectangle{
-		Min: image.Point{
-			X: fig.posX - fig.height/8,
-			Y: fig.posY,
-		},
-		Max: image.Point{
-			X: fig.posX + fig.height/8,
-			Y: fig.posY + 3*fig.height/4,
-		},
-	}
-
-	w.Fill(dr1, fig.col, draw.Src)
-	w.Fill(dr2, fig.col, draw.Src)
-}
-
-var colRed = color.RGBA{255, 0, 0, 255}
-var defaultTShape = tshape{colRed, 0, 400, 0, 400}
 
 func (pw *Visualizer) Main() {
-	pw.tx = make(chan screen.Texture)
+	pw.tx = make(chan primitives.TextureState)
 	pw.done = make(chan struct{})
 
 	pw.sz.HeightPx = defaultHeight
@@ -81,7 +45,7 @@ func (pw *Visualizer) Main() {
 	driver.Main(pw.run)
 }
 
-func (pw *Visualizer) Update(t screen.Texture) {
+func (pw *Visualizer) Update(t primitives.TextureState) {
 	pw.tx <- t
 }
 
@@ -101,7 +65,7 @@ func (pw *Visualizer) run(s screen.Screen) { //this function takes control after
 	}()
 
 	if pw.OnScreenReady != nil {
-		pw.OnScreenReady(s)
+		pw.OnScreenReady()
 	}
 
 	pw.w = w
@@ -157,9 +121,7 @@ func (pw *Visualizer) handleEvent(e any, t screen.Texture) {
 
 	case lifecycle.Event:
 		if e.From == lifecycle.StageDead && e.To == lifecycle.StageAlive {
-			f := defaultTShape
-			f.posX = 400
-			f.posY = 400
+			f := primitives.NewTShape(400, 400)
 			pw.fig = f
 			pw.w.Send(paint.Event{})
 		}
@@ -175,9 +137,7 @@ func (pw *Visualizer) handleEvent(e any, t screen.Texture) {
 			}
 
 			if e.Button == mouse.ButtonRight {
-				f := defaultTShape
-				f.posX = int(e.X)
-				f.posY = int(e.Y)
+				f := primitives.NewTShape(int(e.X), int(e.Y))
 				pw.fig = f
 			}
 
@@ -185,9 +145,14 @@ func (pw *Visualizer) handleEvent(e any, t screen.Texture) {
 		}
 
 	case paint.Event:
+
 		if t == nil {
+			log.Printf("new event: %v", e)
+
 			pw.drawDefaultUI()
 		} else {
+			log.Printf("new texture: %v", t)
+
 			// Використання текстури отриманої через виклик Update.
 			pw.w.Scale(pw.sz.Bounds(), t, t.Bounds(), draw.Src, nil)
 		}

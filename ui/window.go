@@ -26,8 +26,9 @@ type Visualizer struct {
 	Debug         bool
 	OnScreenReady func()
 
-	w    screen.Window
-	tx   chan primitives.TextureState
+	w  screen.Window
+	tx chan primitives.TextureStateI
+
 	done chan struct{}
 
 	sz  size.Event
@@ -36,7 +37,7 @@ type Visualizer struct {
 }
 
 func (pw *Visualizer) Main() {
-	pw.tx = make(chan primitives.TextureState)
+	pw.tx = make(chan primitives.TextureStateI)
 	pw.done = make(chan struct{})
 
 	pw.sz.HeightPx = defaultHeight
@@ -45,7 +46,7 @@ func (pw *Visualizer) Main() {
 	driver.Main(pw.run)
 }
 
-func (pw *Visualizer) Update(t primitives.TextureState) {
+func (pw *Visualizer) Update(t primitives.TextureStateI) {
 	pw.tx <- t
 }
 
@@ -85,7 +86,7 @@ func (pw *Visualizer) run(s screen.Screen) { //this function takes control after
 		}
 	}()
 
-	var t screen.Texture
+	var t primitives.TextureStateI
 
 	for {
 		select {
@@ -115,7 +116,7 @@ func detectTerminate(e any) bool {
 	return false
 }
 
-func (pw *Visualizer) handleEvent(e any, t screen.Texture) {
+func (pw *Visualizer) handleEvent(e any, t primitives.TextureStateI) {
 
 	switch e := e.(type) {
 
@@ -152,9 +153,33 @@ func (pw *Visualizer) handleEvent(e any, t screen.Texture) {
 			pw.drawDefaultUI()
 		} else {
 			log.Printf("new texture: %v", t)
+			if bgCol := t.GetBgColor(); bgCol != nil {
+				pw.w.Fill(pw.sz.Bounds(), bgCol, draw.Src)
+			}
+			if bgRect := t.GetBgRect(); bgRect != nil {
+
+				bgRectScaled := image.Rect(
+					int(bgRect.X1*float64(pw.sz.WidthPx)),
+					int(bgRect.X2*float64(pw.sz.WidthPx)),
+					int(bgRect.Y1*float64(pw.sz.HeightPx)),
+					int(bgRect.Y2*float64(pw.sz.HeightPx)),
+				)
+				pw.w.Fill(bgRectScaled, color.Black, draw.Src)
+			}
+
+			for _, fig := range t.GetFigs() {
+
+				tshapePosScaled := image.Point{
+					X: int(fig.X * float64(pw.sz.WidthPx)),
+					Y: int(fig.Y * float64(pw.sz.HeightPx)),
+				}
+
+				f := primitives.NewTShape(tshapePosScaled.X, tshapePosScaled.Y)
+				f.Draw(pw.w)
+			}
 
 			// Використання текстури отриманої через виклик Update.
-			pw.w.Scale(pw.sz.Bounds(), t, t.Bounds(), draw.Src, nil)
+			//pw.w.Scale(pw.sz.Bounds(), t, t.Bounds(), draw.Src, nil)
 		}
 		pw.w.Publish()
 
@@ -174,6 +199,6 @@ func (pw *Visualizer) drawDefaultUI() {
 	pw.drawFigure()
 
 	for _, br := range imageutil.Border(pw.sz.Bounds(), 10) {
-		pw.w.Fill(br, color.RGBA{200, 0, 0, 255}, draw.Src)
+		pw.w.Fill(br, color.RGBA{R: 200, A: 255}, draw.Src)
 	}
 }

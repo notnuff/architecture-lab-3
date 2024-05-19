@@ -8,14 +8,14 @@ import (
 
 // Receiver отримує текстуру, яка була підготовлена в результаті виконання команд у циклі подій.
 type Receiver interface {
-	Update(ts primitives.TextureState)
+	Update(ts primitives.TextureStateI)
 }
 
 // Loop реалізує цикл подій для формування текстури отриманої через виконання операцій отриманих з внутрішньої черги.
 type Loop struct {
 	Receiver Receiver
 
-	ts primitives.TextureState
+	ts primitives.TextureStateI
 	mq messageQueue
 
 	stop    chan struct{}
@@ -28,7 +28,10 @@ var size = image.Pt(800, 800)
 func (l *Loop) Start() {
 	// TODO: стартувати цикл подій.
 
+	l.ts = new(primitives.TextureState)
+
 	l.stop = make(chan struct{})
+	l.stopReq = false
 
 	go func() {
 		for !l.stopReq || !l.mq.empty() {
@@ -49,7 +52,7 @@ func (l *Loop) Post(op Operation) {
 
 // StopAndWait сигналізує про необхідність завершити цикл та блокується до моменту його повної зупинки.
 func (l *Loop) StopAndWait() {
-	l.Post(OperationFunc(func(ts primitives.TextureState) {
+	l.Post(OperationFunc(func(ts primitives.TextureStateI) {
 		l.stopReq = true
 	}))
 	<-l.stop
@@ -62,9 +65,8 @@ type message struct {
 }
 
 type messageQueue struct {
-	mu            sync.Mutex
-	newElemSignal chan struct{}
-	isWaiting     bool
+	mu         sync.Mutex
+	pullSignal chan struct{}
 
 	head, tail *message
 }
@@ -82,8 +84,9 @@ func (mq *messageQueue) push(op Operation) {
 		mq.tail.nextNode = thisNode
 		mq.tail = thisNode
 	}
-	if mq.isWaiting {
-		mq.newElemSignal <- struct{}{}
+	if mq.pullSignal != nil {
+		close(mq.pullSignal)
+		mq.pullSignal = nil
 	}
 }
 
@@ -92,13 +95,12 @@ func (mq *messageQueue) pull() Operation {
 	defer mq.mu.Unlock()
 
 	if mq.head == nil {
-		mq.isWaiting = true
+		mq.pullSignal = make(chan struct{})
 		mq.mu.Unlock()
 
-		<-mq.newElemSignal
+		<-mq.pullSignal
 
 		mq.mu.Lock()
-		mq.isWaiting = false
 	}
 
 	res := mq.head.op

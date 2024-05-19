@@ -148,11 +148,8 @@ func (pw *Visualizer) handleEvent(e any, t primitives.TextureStateI) {
 	case paint.Event:
 
 		if t == nil {
-			log.Printf("new event: %v", e)
-
 			pw.drawDefaultUI()
 		} else {
-			log.Printf("new texture: %v", t)
 			if bgCol := t.GetBgColor(); bgCol != nil {
 				pw.w.Fill(pw.sz.Bounds(), bgCol, draw.Src)
 			}
